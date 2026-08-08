@@ -150,6 +150,7 @@ export async function POST(req: NextRequest) {
           isPregnant: patient?.isPregnant,
           pregnancyTrimester: patient?.pregnancyTrimester,
           isLactating: patient?.isLactating,
+          bouchardPalCategory: bouchard?.palCategory ?? undefined,
         });
         dailyCalorieTarget = calResult.targetCalorie;
       } catch (e) {

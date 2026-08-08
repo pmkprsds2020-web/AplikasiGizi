@@ -97,6 +97,20 @@ export async function POST(req: NextRequest) {
       if (assessment.stress) stress = assessment.stress;
     }
 
+    // ---------------------------------------------------------------
+    // Bouchard Activity Record (priority input for both the calorie
+    // engine's activity correction AND the exercise target) — never
+    // blocks plan creation if unavailable (fallback chain lives inside
+    // the exercise-target engine, and computeCalorieTarget falls back to
+    // the manually selected `activity` level).
+    // ---------------------------------------------------------------
+    let bouchard: any = null;
+    try {
+      bouchard = await supabaseGetLatestBouchardAssessment(resolvedPatientId);
+    } catch (e) {
+      console.warn("[exercise] Bouchard lookup failed (non-fatal):", e);
+    }
+
     const calResult = computeCalorieTarget({
       gender: patient.gender,
       ageYears,
@@ -108,19 +122,8 @@ export async function POST(req: NextRequest) {
       isPregnant: patient.isPregnant,
       pregnancyTrimester: patient.pregnancyTrimester,
       isLactating: patient.isLactating,
+      bouchardPalCategory: bouchard?.palCategory ?? undefined,
     });
-
-    // ---------------------------------------------------------------
-    // Bouchard Activity Record (priority input for exercise target) —
-    // never blocks plan creation if unavailable (fallback chain lives
-    // inside the exercise-target engine).
-    // ---------------------------------------------------------------
-    let bouchard: any = null;
-    try {
-      bouchard = await supabaseGetLatestBouchardAssessment(resolvedPatientId);
-    } catch (e) {
-      console.warn("[exercise] Bouchard lookup failed (non-fatal):", e);
-    }
 
     const ecog = assessment?.ecog;
     const barthel = assessment?.barthel ?? 100;
