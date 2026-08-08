@@ -17,6 +17,7 @@ import {
   Clock,
   Upload,
   FileDown,
+  Download,
 } from "lucide-react";
 import {
   Card,
@@ -620,19 +621,6 @@ function CompareDialog({
     }
   };
 
-  const complianceColor =
-    result?.complianceScore >= 80
-      ? "#10b981"
-      : result?.complianceScore >= 60
-        ? "#f59e0b"
-        : "#ef4444";
-
-  const radarData = (result?.nutrientComparison || []).map((n: any) => ({
-    nutrient: n.label,
-    target: 100,
-    actual: Math.min(150, n.pct),
-  }));
-
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setResult(null); }}>
       <DialogContent className="max-h-[94vh] overflow-hidden p-0 sm:max-w-[780px]">
@@ -725,110 +713,14 @@ function CompareDialog({
 
           {/* Results */}
           {result && (
-            <div className="mt-4 space-y-4">
-              {/* Compliance gauge */}
-              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4 text-center">
-                <p className="text-xs font-semibold text-muted-foreground">Kesesuaian Meal Plan</p>
-                <p className="text-5xl font-bold cl-stat-num" style={{ color: complianceColor }}>
-                  {result.complianceScore}%
-                </p>
-                <div className="mx-auto mt-2 h-2 max-w-xs overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${result.complianceScore}%`, backgroundColor: complianceColor }}
-                  />
-                </div>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  {result.results.planName} vs {result.results.recordCount} food record
-                </p>
-              </div>
-
-              {/* Nutrient comparison */}
-              <div>
-                <p className="mb-2 text-xs font-semibold">Perbandingan Nutrisi: Target vs Aktual</p>
-                <div className="space-y-2">
-                  {result.nutrientComparison.map((n: any) => {
-                    const pct = n.pct;
-                    const isGood = n.label === "Natrium" ? n.actual <= n.target : pct >= 85 && pct <= 110;
-                    const barColor = isGood ? "bg-emerald-500" : "bg-rose-500";
-                    return (
-                      <div key={n.label} className="rounded-md border border-border/60 p-2">
-                        <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="font-medium">{n.label}</span>
-                          <span className="font-mono text-muted-foreground">
-                            {Math.round(n.actual)} / {Math.round(n.target)} {n.unit}
-                            <span className={`ml-1.5 font-bold ${isGood ? "text-emerald-600" : "text-rose-600"}`}>
-                              ({pct}%)
-                            </span>
-                          </span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Radar Chart */}
-              {radarData.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-semibold">Radar Chart: Target vs Aktual</p>
-                  <div className="h-56 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart data={radarData}>
-                        <PolarGrid stroke="var(--border)" />
-                        <PolarAngleAxis dataKey="nutrient" tick={{ fontSize: 10 }} />
-                        <PolarRadiusAxis domain={[0, 150]} tick={{ fontSize: 9 }} tickFormatter={(v) => `${v}%`} />
-                        <Radar name="Target" dataKey="target" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.2} />
-                        <Radar name="Aktual" dataKey="actual" stroke="#10b981" fill="#10b981" fillOpacity={0.4} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Food comparison */}
-              <div>
-                <p className="mb-2 text-xs font-semibold">Perbandingan Makanan</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-center dark:bg-emerald-950/30">
-                    <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" />
-                    <p className="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-400">{result.foodComparison.matched.length}</p>
-                    <p className="text-[9px] text-muted-foreground">Cocok</p>
-                  </div>
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-center dark:bg-amber-950/30">
-                    <RefreshCw className="mx-auto h-4 w-4 text-amber-600" />
-                    <p className="mt-1 text-lg font-bold text-amber-700 dark:text-amber-400">{result.foodComparison.replaced.length}</p>
-                    <p className="text-[9px] text-muted-foreground">Diganti</p>
-                  </div>
-                  <div className="rounded-md border border-rose-300 bg-rose-50 p-2 text-center dark:bg-rose-950/30">
-                    <XCircle className="mx-auto h-4 w-4 text-rose-600" />
-                    <p className="mt-1 text-lg font-bold text-rose-700 dark:text-rose-400">{result.foodComparison.removed.length}</p>
-                    <p className="text-[9px] text-muted-foreground">Dihapus</p>
-                  </div>
-                  <div className="rounded-md border border-violet-300 bg-violet-50 p-2 text-center dark:bg-violet-950/30">
-                    <GitCompare className="mx-auto h-4 w-4 text-violet-600" />
-                    <p className="mt-1 text-lg font-bold text-violet-700 dark:text-violet-400">{result.foodComparison.added.length}</p>
-                    <p className="text-[9px] text-muted-foreground">Tambahan</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Insight */}
-              {result.aiInsight && (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
-                    <Brain className="h-3.5 w-3.5 text-primary" />
-                    AI Insight CareLivia
-                  </p>
-                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
-                    {result.aiInsight}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ComparisonResultsView
+              complianceScore={result.complianceScore}
+              planName={result.results.planName}
+              recordCount={result.results.recordCount}
+              nutrientComparison={result.nutrientComparison}
+              foodComparison={result.foodComparison}
+              aiInsight={result.aiInsight}
+            />
           )}
         </ScrollArea>
 
@@ -843,10 +735,234 @@ function CompareDialog({
 }
 
 // ---------------------------------------------------------------------
+// Shared results renderer — identical view used by the "Jalankan
+// Perbandingan" flow and the "View" (👁) modal on Riwayat Perbandingan.
+// ---------------------------------------------------------------------
+function ComparisonResultsView({
+  complianceScore,
+  planName,
+  recordCount,
+  nutrientComparison,
+  foodComparison,
+  aiInsight,
+}: {
+  complianceScore: number;
+  planName?: string;
+  recordCount?: number;
+  nutrientComparison: any[];
+  foodComparison: { matched: any[]; replaced: any[]; removed: any[]; added: any[] };
+  aiInsight?: string | null;
+}) {
+  const complianceColor =
+    complianceScore >= 80 ? "#10b981" : complianceScore >= 60 ? "#f59e0b" : "#ef4444";
+
+  const radarData = (nutrientComparison || []).map((n: any) => ({
+    nutrient: n.label,
+    target: 100,
+    actual: Math.min(150, n.pct),
+  }));
+
+  return (
+    <div className="mt-4 space-y-4">
+      {/* Compliance gauge */}
+      <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4 text-center">
+        <p className="text-xs font-semibold text-muted-foreground">Kesesuaian Meal Plan</p>
+        <p className="text-5xl font-bold cl-stat-num" style={{ color: complianceColor }}>
+          {complianceScore}%
+        </p>
+        <div className="mx-auto mt-2 h-2 max-w-xs overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${complianceScore}%`, backgroundColor: complianceColor }}
+          />
+        </div>
+        {(planName || recordCount !== undefined) && (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {planName} {recordCount !== undefined ? `vs ${recordCount} food record` : ""}
+          </p>
+        )}
+      </div>
+
+      {/* Nutrient comparison */}
+      <div>
+        <p className="mb-2 text-xs font-semibold">Perbandingan Nutrisi: Target vs Aktual</p>
+        <div className="space-y-2">
+          {(nutrientComparison || []).map((n: any) => {
+            const pct = n.pct;
+            const isGood = n.label === "Natrium" ? n.actual <= n.target : pct >= 85 && pct <= 110;
+            const barColor = isGood ? "bg-emerald-500" : "bg-rose-500";
+            return (
+              <div key={n.label} className="rounded-md border border-border/60 p-2">
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="font-medium">{n.label}</span>
+                  <span className="font-mono text-muted-foreground">
+                    {Math.round(n.actual)} / {Math.round(n.target)} {n.unit}
+                    <span className={`ml-1.5 font-bold ${isGood ? "text-emerald-600" : "text-rose-600"}`}>
+                      ({pct}%)
+                    </span>
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Radar Chart */}
+      {radarData.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold">Radar Chart: Target vs Aktual</p>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="var(--border)" />
+                <PolarAngleAxis dataKey="nutrient" tick={{ fontSize: 10 }} />
+                <PolarRadiusAxis domain={[0, 150]} tick={{ fontSize: 9 }} tickFormatter={(v) => `${v}%`} />
+                <Radar name="Target" dataKey="target" stroke="#94a3b8" fill="#94a3b8" fillOpacity={0.2} />
+                <Radar name="Aktual" dataKey="actual" stroke="#10b981" fill="#10b981" fillOpacity={0.4} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Food comparison */}
+      <div>
+        <p className="mb-2 text-xs font-semibold">Perbandingan Makanan</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-center dark:bg-emerald-950/30">
+            <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" />
+            <p className="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-400">{foodComparison?.matched?.length ?? 0}</p>
+            <p className="text-[9px] text-muted-foreground">Cocok</p>
+          </div>
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-center dark:bg-amber-950/30">
+            <RefreshCw className="mx-auto h-4 w-4 text-amber-600" />
+            <p className="mt-1 text-lg font-bold text-amber-700 dark:text-amber-400">{foodComparison?.replaced?.length ?? 0}</p>
+            <p className="text-[9px] text-muted-foreground">Diganti</p>
+          </div>
+          <div className="rounded-md border border-rose-300 bg-rose-50 p-2 text-center dark:bg-rose-950/30">
+            <XCircle className="mx-auto h-4 w-4 text-rose-600" />
+            <p className="mt-1 text-lg font-bold text-rose-700 dark:text-rose-400">{foodComparison?.removed?.length ?? 0}</p>
+            <p className="text-[9px] text-muted-foreground">Dihapus</p>
+          </div>
+          <div className="rounded-md border border-violet-300 bg-violet-50 p-2 text-center dark:bg-violet-950/30">
+            <GitCompare className="mx-auto h-4 w-4 text-violet-600" />
+            <p className="mt-1 text-lg font-bold text-violet-700 dark:text-violet-400">{foodComparison?.added?.length ?? 0}</p>
+            <p className="text-[9px] text-muted-foreground">Tambahan</p>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Insight */}
+      {aiInsight && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
+            <Brain className="h-3.5 w-3.5 text-primary" />
+            AI Insight CareLivia
+          </p>
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
+            {aiInsight}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// View Comparison Dialog — reopens a saved comparison from Riwayat
+// Perbandingan, reading straight from the stored comparison_json
+// (h.results) without recomputing anything.
+// ---------------------------------------------------------------------
+function ViewComparisonDialog({
+  history,
+  onClose,
+}: {
+  history: any | null;
+  onClose: () => void;
+}) {
+  const [downloading, setDownloading] = React.useState(false);
+
+  if (!history) return null;
+  const r = history.results;
+
+  const handleExportPdf = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/comparisons/${history.id}/export-pdf`);
+      if (!res.ok) throw new Error("Gagal membuat PDF");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `perbandingan-${history.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e.message || "Gagal mengunduh PDF");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!history} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[94vh] overflow-hidden p-0 sm:max-w-[780px]">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <DialogTitle className="flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-primary" />
+            Bandingkan Meal Plan vs Food Record
+          </DialogTitle>
+          <DialogDescription>
+            Hasil perbandingan tersimpan · {r?.planName || history.savedMenuName || "—"} ·{" "}
+            Compare {new Date(history.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })} ·{" "}
+            Food Record {new Date(history.foodRecordDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <ScrollArea className="max-h-[72vh] px-6 py-3">
+          <ComparisonResultsView
+            complianceScore={history.complianceScore}
+            planName={r?.planName || history.savedMenuName}
+            recordCount={r?.recordCount}
+            nutrientComparison={r?.nutrientComparison || []}
+            foodComparison={r?.foodComparison || { matched: [], replaced: [], removed: [], added: [] }}
+            aiInsight={history.aiInsight}
+          />
+        </ScrollArea>
+
+        <DialogFooter className="border-t px-6 py-3">
+          <Button variant="outline" onClick={onClose}>
+            Tutup
+          </Button>
+          <Button onClick={handleExportPdf} disabled={downloading}>
+            {downloading ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Membuat PDF...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" /> Export PDF
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------
 // Comparison History Section
 // ---------------------------------------------------------------------
 function ComparisonHistorySection({ patientId }: { patientId: string }) {
   const { data: history, isLoading } = useComparisons(patientId);
+  const [viewHistory, setViewHistory] = React.useState<any | null>(null);
 
   if (isLoading) return <Skeleton className="mt-4 h-32 rounded-xl" />;
   if (!history || history.length === 0) return null;
@@ -867,6 +983,7 @@ function ComparisonHistorySection({ patientId }: { patientId: string }) {
                 <TableHead className="text-right">Skor</TableHead>
                 <TableHead className="text-right">Kalori</TableHead>
                 <TableHead className="text-right">Protein</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -894,6 +1011,17 @@ function ComparisonHistorySection({ patientId }: { patientId: string }) {
                     <TableCell className="text-right text-xs font-mono">
                       {r?.actualTotals ? `${Math.round(r.actualTotals.protein)}g` : "—"}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => setViewHistory(h)}
+                        title="Lihat hasil lengkap"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -901,6 +1029,8 @@ function ComparisonHistorySection({ patientId }: { patientId: string }) {
           </Table>
         </div>
       </SectionCard>
+
+      <ViewComparisonDialog history={viewHistory} onClose={() => setViewHistory(null)} />
     </div>
   );
 }

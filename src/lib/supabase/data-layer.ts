@@ -3010,6 +3010,43 @@ function buildAiEvaluation(
   return lines.join(" ");
 }
 
+// Reads a single saved "meal plan vs food record" comparison row, plus its
+// patient, straight from comparison_history — used by the Riwayat
+// Perbandingan "View" modal / PDF export. Reads the stored comparison_json
+// (results) verbatim; does not recompute anything.
+export async function supabaseGetComparisonById(id: string): Promise<any | null> {
+  const { client } = await getServerClient();
+  const { data, error } = await client
+    .from("comparison_history")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  let patient: any = null;
+  if (data.patient_id) {
+    const { data: patientRow } = await client
+      .from("patients")
+      .select("id, name, mrn")
+      .eq("id", data.patient_id)
+      .maybeSingle();
+    patient = patientRow ? { id: patientRow.id, name: patientRow.name, mrn: patientRow.mrn } : null;
+  }
+
+  return {
+    id: data.id,
+    patientId: data.patient_id,
+    patient,
+    mealPlanId: data.meal_plan_id,
+    savedMenuName: data.saved_menu_name,
+    foodRecordDate: data.food_record_date,
+    complianceScore: data.compliance_score,
+    results: data.results ?? null,
+    aiInsight: data.ai_insight,
+    createdAt: data.created_at,
+  };
+}
+
 export async function supabaseGetMealPlanHistoryComparison(historyId: string): Promise<any | null> {
   const { client } = await getServerClient();
 
