@@ -2951,6 +2951,191 @@ export async function supabaseGetMealPlanHistoryDetail(historyId: string): Promi
   };
 }
 
+// ---------------------------------------------------------------------
+// Meal Plan History — full comparison detail ("View" button)
+// Loads one history snapshot + the target/patient context from its
+// parent meal_plans row + that day's Food Record + computes the
+// Meal Plan vs Food Record comparison table (with 🟢/🟡/🔴 indicator)
+// and a deterministic (rule-based, no LLM call — fast & reliable for a
+// detail page) AI Evaluation narrative.
+// ---------------------------------------------------------------------
+const COMPARISON_COMPONENTS: { key: "cal" | "protein" | "fat" | "carb" | "fiber" | "sodium"; label: string; unit: string }[] = [
+  { key: "cal", label: "Kalori", unit: "kcal" },
+  { key: "protein", label: "Protein", unit: "g" },
+  { key: "fat", label: "Lemak", unit: "g" },
+  { key: "carb", label: "Karbohidrat", unit: "g" },
+  { key: "fiber", label: "Serat", unit: "g" },
+  { key: "sodium", label: "Sodium", unit: "mg" },
+];
+
+// Indicator thresholds (% deviation of Food Record vs Meal Plan target):
+// within 10%  -> 🟢 sesuai target
+// 10–25%      -> 🟡 mendekati target
+// beyond 25%  -> 🔴 jauh dari target
+function comparisonIndicator(planValue: number, actualValue: number): "GREEN" | "YELLOW" | "RED" {
+  if (!planValue || planValue <= 0) return actualValue > 0 ? "YELLOW" : "GREEN";
+  const pctDiff = Math.abs(actualValue - planValue) / planValue;
+  if (pctDiff <= 0.1) return "GREEN";
+  if (pctDiff <= 0.25) return "YELLOW";
+  return "RED";
+}
+
+function buildAiEvaluation(
+  compliance: number,
+  rows: { label: string; plan: number; actual: number; diff: number; indicator: string }[],
+): string {
+  const lines: string[] = [];
+  lines.push(`Kepatuhan terhadap Meal Plan: ${Math.round(compliance)}%.`);
+  for (const r of rows) {
+    if (r.plan <= 0) continue;
+    const pct = Math.round((r.diff / r.plan) * 100);
+    if (r.indicator === "GREEN") {
+      lines.push(`${r.label} telah sesuai target.`);
+    } else if (r.diff < 0) {
+      lines.push(`${r.label} kurang ${Math.abs(pct)}% dari target.`);
+    } else {
+      lines.push(`${r.label} berlebih ${Math.abs(pct)}% dari target.`);
+    }
+  }
+  const worst = rows
+    .filter((r) => r.plan > 0)
+    .sort((a, b) => Math.abs(b.diff / (b.plan || 1)) - Math.abs(a.diff / (a.plan || 1)))[0];
+  if (worst && worst.indicator !== "GREEN") {
+    if (worst.diff < 0) {
+      lines.push(`Disarankan menambah asupan ${worst.label.toLowerCase()} pada makan berikutnya untuk mendekati target harian.`);
+    } else {
+      lines.push(`Disarankan mengurangi porsi sumber ${worst.label.toLowerCase()} agar sesuai target harian.`);
+    }
+  }
+  return lines.join(" ");
+}
+
+export async function supabaseGetMealPlanHistoryComparison(historyId: string): Promise<any | null> {
+  const { client } = await getServerClient();
+
+  const { data: historyRow, error: historyError } = await client
+    .from("meal_plan_history")
+    .select("id, meal_plan_id, action, changes, snapshot, actor, created_at")
+    .eq("id", historyId)
+    .maybeSingle();
+  if (historyError || !historyRow) return null;
+
+  const { data: planRow } = await client
+    .from("meal_plans")
+    .select("id, patient_id, date, target_cal, target_protein, target_fat, target_carb, target_fiber, target_sodium")
+    .eq("id", historyRow.meal_plan_id)
+    .maybeSingle();
+
+  const patientId: string | null = planRow?.patient_id ?? null;
+  let patient: any = null;
+  if (patientId) {
+    const { data: patientRow } = await client
+      .from("patients")
+      .select("id, name, mrn")
+      .eq("id", patientId)
+      .maybeSingle();
+    patient = patientRow ? { id: patientRow.id, name: patientRow.name, mrn: patientRow.mrn } : null;
+  }
+
+  const items: any[] = historyRow.snapshot?.items ?? [];
+  const planTotals = historyRow.snapshot?.totals ?? {
+    cal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sodium: 0,
+  };
+  const targets = planRow
+    ? {
+        targetCal: planRow.target_cal,
+        targetProtein: planRow.target_protein,
+        targetFat: planRow.target_fat,
+        targetCarb: planRow.target_carb,
+        targetFiber: planRow.target_fiber,
+        targetSodium: planRow.target_sodium,
+      }
+    : null;
+
+  // Comparison date: the calendar day this snapshot was recorded.
+  const compareDate = new Date(historyRow.created_at);
+  const compareDateStr = compareDate.toISOString().slice(0, 10);
+
+  let foodRecords: any[] = [];
+  if (patientId) {
+    foodRecords = await supabaseListFoodRecords(patientId, compareDateStr);
+  }
+
+  const recordTotals = foodRecords.reduce(
+    (acc, r) => {
+      acc.cal += r.cal || 0;
+      acc.protein += r.protein || 0;
+      acc.fat += r.fat || 0;
+      acc.carb += r.carb || 0;
+      acc.fiber += r.fiber || 0;
+      acc.sodium += r.sodium || 0;
+      return acc;
+    },
+    { cal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sodium: 0 },
+  );
+
+  const comparisonRows = COMPARISON_COMPONENTS.map((c) => {
+    const planValue = planTotals[c.key] ?? 0;
+    const actualValue = recordTotals[c.key] ?? 0;
+    const diff = actualValue - planValue;
+    return {
+      key: c.key,
+      label: c.label,
+      unit: c.unit,
+      plan: planValue,
+      actual: actualValue,
+      diff,
+      indicator: comparisonIndicator(planValue, actualValue),
+    };
+  });
+
+  const compliance =
+    planTotals.cal > 0 ? Math.max(0, 100 - (Math.abs(recordTotals.cal - planTotals.cal) / planTotals.cal) * 100) : 0;
+
+  const aiEvaluation = buildAiEvaluation(compliance, comparisonRows);
+
+  return {
+    id: historyRow.id,
+    mealPlanId: historyRow.meal_plan_id,
+    action: historyRow.action,
+    name: historyRow.changes?.name || historyRow.snapshot?.name || null,
+    createdAt: historyRow.created_at,
+    compareDate: compareDateStr,
+    patient,
+    targets,
+    items: items.map((i: any) => ({
+      slot: i.slot,
+      foodName: i.foodName,
+      amount: i.amount,
+      cal: i.cal,
+      protein: i.protein,
+      fat: i.fat,
+      carb: i.carb,
+      fiber: i.fiber,
+      sodium: i.sodium,
+    })),
+    planTotals,
+    foodRecords: foodRecords.map((r: any) => ({
+      slot: r.slot,
+      foodName: r.food?.name || "Makanan",
+      amount: r.amount,
+      consumed: r.consumed,
+      date: r.date,
+      cal: r.cal,
+      protein: r.protein,
+      fat: r.fat,
+      carb: r.carb,
+      fiber: r.fiber,
+      sodium: r.sodium,
+    })),
+    recordTotals,
+    comparison: comparisonRows,
+    compliance,
+    aiEvaluation,
+    sugarNote: "Data gula tidak tersedia pada basis data komposisi pangan (TKPI) yang digunakan sistem.",
+  };
+}
+
 export async function supabaseDeleteMealPlanHistory(historyId: string): Promise<{ error: string | null }> {
   const { client, session } = await getServerClient();
   if (!session) return { error: "Authentication required." };

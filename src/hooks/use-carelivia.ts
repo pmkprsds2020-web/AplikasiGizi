@@ -409,6 +409,14 @@ export function useMealPlanHistoryDetail(historyId: string | null) {
   });
 }
 
+export function useMealPlanHistoryComparison(historyId: string | null) {
+  return useQuery({
+    queryKey: ["meal-plan-history-comparison", historyId],
+    queryFn: () => jsonFetch<any>(`/api/meal-plan-history/${historyId}/comparison`),
+    enabled: !!historyId,
+  });
+}
+
 export function useDeleteMealPlanHistory() {
   const qc = useQueryClient();
   return useMutation({

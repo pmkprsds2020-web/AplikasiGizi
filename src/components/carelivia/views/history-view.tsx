@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { History, Eye, RotateCcw, Trash2, User } from "lucide-react";
+import { History, Eye, RotateCcw, Trash2, User, Download } from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +45,7 @@ import {
   useMealPlans,
   useMealPlanHistory,
   useMealPlanHistoryDetail,
+  useMealPlanHistoryComparison,
   useDeleteMealPlanHistory,
   useApplyMealPlanHistory,
 } from "@/hooks/use-carelivia";
@@ -289,6 +300,26 @@ export function MealPlanHistoryView() {
   );
 }
 
+const INDICATOR_DOT: Record<string, string> = {
+  GREEN: "🟢",
+  YELLOW: "🟡",
+  RED: "🔴",
+};
+
+const INDICATOR_LABEL: Record<string, string> = {
+  GREEN: "Sesuai target",
+  YELLOW: "Mendekati target",
+  RED: "Jauh dari target",
+};
+
+function groupBySlot(items: any[]): Record<string, any[]> {
+  const out: Record<string, any[]> = {};
+  for (const item of items || []) {
+    (out[item.slot] ||= []).push(item);
+  }
+  return out;
+}
+
 function HistoryDetailDialog({
   historyId,
   onOpenChange,
@@ -296,57 +327,197 @@ function HistoryDetailDialog({
   historyId: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: detail, isLoading } = useMealPlanHistoryDetail(historyId);
+  // Full comparison payload (Meal Plan + Food Record + analysis + AI
+  // Evaluation). Falls back to the lighter snapshot-only detail if the
+  // comparison endpoint has nothing (e.g. history predates this feature).
+  const { data: detail, isLoading } = useMealPlanHistoryComparison(historyId);
+  const { data: basicDetail } = useMealPlanHistoryDetail(historyId);
+
+  const planBySlot = groupBySlot(detail?.items || []);
+  const recordBySlot = groupBySlot(detail?.foodRecords || []);
+
+  const chartData = React.useMemo(() => {
+    if (!detail?.comparison) return [];
+    return detail.comparison
+      .filter((c: any) => ["cal", "protein", "fat", "carb"].includes(c.key))
+      .map((c: any) => ({
+        name: c.label,
+        "Meal Plan": Math.round(c.plan),
+        "Food Record": Math.round(c.actual),
+      }));
+  }, [detail]);
 
   return (
     <Dialog open={!!historyId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{detail?.name || "Detail Meal Plan"}</DialogTitle>
+          <DialogTitle>{detail?.name || basicDetail?.name || "Detail Meal Plan"}</DialogTitle>
           <DialogDescription>
             {detail && new Date(detail.createdAt).toLocaleString("id-ID")}
+            {detail?.patient?.name ? ` · ${detail.patient.name}` : ""}
           </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
         ) : detail ? (
-          <div className="space-y-3">
-            {detail.totals && (
-              <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-3 text-xs sm:grid-cols-4">
-                <span>Energi: <strong className="text-foreground">{Math.round(detail.totals.cal)} kcal</strong></span>
-                <span>Protein: <strong className="text-foreground">{Math.round(detail.totals.protein)}g</strong></span>
-                <span>Lemak: <strong className="text-foreground">{Math.round(detail.totals.fat)}g</strong></span>
-                <span>Karbo: <strong className="text-foreground">{Math.round(detail.totals.carb)}g</strong></span>
-              </div>
+          <div className="space-y-6">
+            {/* A. Informasi Meal Plan */}
+            {detail.targets && (
+              <SectionCard title="Target Meal Plan" description="Ditetapkan saat meal plan ini dibuat">
+                <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-3 text-xs sm:grid-cols-4">
+                  <span>Target Kalori: <strong className="text-foreground">{Math.round(detail.targets.targetCal)} kcal</strong></span>
+                  <span>Target Protein: <strong className="text-foreground">{Math.round(detail.targets.targetProtein)}g</strong></span>
+                  <span>Target Lemak: <strong className="text-foreground">{Math.round(detail.targets.targetFat)}g</strong></span>
+                  <span>Target Karbo: <strong className="text-foreground">{Math.round(detail.targets.targetCarb)}g</strong></span>
+                </div>
+              </SectionCard>
             )}
-            <div className="max-h-80 overflow-y-auto rounded-md border border-border/60">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Slot</TableHead>
-                    <TableHead>Makanan</TableHead>
-                    <TableHead className="text-right">Gram</TableHead>
-                    <TableHead className="text-right">Kalori</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(detail.items || []).map((item: any, idx: number) => (
-                    <TableRow key={idx}>
-                      <TableCell className="text-xs">
-                        {SLOT_LABELS[item.slot] || item.slot}
-                      </TableCell>
-                      <TableCell className="text-xs">{item.foodName}</TableCell>
-                      <TableCell className="text-right text-xs">{item.amount}g</TableCell>
-                      <TableCell className="text-right text-xs">{Math.round(item.cal)}</TableCell>
+
+            {/* B. Detail Meal Plan */}
+            <SectionCard title="Detail Meal Plan" description={`${detail.compareDate ? new Date(detail.compareDate).toLocaleDateString("id-ID") : ""}`}>
+              {Object.keys(planBySlot).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Tidak ada item.</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-md border border-border/60">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Slot</TableHead>
+                        <TableHead>Makanan</TableHead>
+                        <TableHead className="text-right">Gram</TableHead>
+                        <TableHead className="text-right">Kalori</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(planBySlot).map(([slot, items]) =>
+                        items.map((item: any, idx: number) => (
+                          <TableRow key={`${slot}-${idx}`}>
+                            <TableCell className="text-xs">{SLOT_LABELS[slot] || slot}</TableCell>
+                            <TableCell className="text-xs">{item.foodName}</TableCell>
+                            <TableCell className="text-right text-xs">{item.amount}g</TableCell>
+                            <TableCell className="text-right text-xs">{Math.round(item.cal)}</TableCell>
+                          </TableRow>
+                        )),
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* C. Food Record */}
+            <SectionCard title="Food Record" description="Konsumsi aktual pada tanggal yang sama">
+              {Object.keys(recordBySlot).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Tidak ada Food Record pada tanggal ini.</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-md border border-border/60">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Slot</TableHead>
+                        <TableHead>Makanan</TableHead>
+                        <TableHead className="text-right">Gram</TableHead>
+                        <TableHead className="text-right">Kalori</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(recordBySlot).map(([slot, items]) =>
+                        items.map((item: any, idx: number) => (
+                          <TableRow key={`${slot}-${idx}`}>
+                            <TableCell className="text-xs">{SLOT_LABELS[slot] || slot}</TableCell>
+                            <TableCell className="text-xs">{item.foodName}</TableCell>
+                            <TableCell className="text-right text-xs">{item.amount}g</TableCell>
+                            <TableCell className="text-right text-xs">{Math.round(item.cal)}</TableCell>
+                          </TableRow>
+                        )),
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* D. Analisis Perbandingan */}
+            <SectionCard title="Analisis Perbandingan" description="Meal Plan vs Food Record">
+              <div className="overflow-x-auto rounded-md border border-border/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Komponen</TableHead>
+                      <TableHead className="text-right">Meal Plan</TableHead>
+                      <TableHead className="text-right">Food Record</TableHead>
+                      <TableHead className="text-right">Selisih</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {(detail.comparison || []).map((row: any) => (
+                      <TableRow key={row.key}>
+                        <TableCell className="text-xs font-medium">{row.label}</TableCell>
+                        <TableCell className="text-right text-xs">{Math.round(row.plan)} {row.unit}</TableCell>
+                        <TableCell className="text-right text-xs">{Math.round(row.actual)} {row.unit}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {row.diff >= 0 ? "+" : ""}{Math.round(row.diff)} {row.unit}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <span title={INDICATOR_LABEL[row.indicator]}>
+                            {INDICATOR_DOT[row.indicator]} {INDICATOR_LABEL[row.indicator]}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {detail.sugarNote && (
+                <p className="mt-2 text-[10px] italic text-muted-foreground">{detail.sugarNote}</p>
+              )}
+            </SectionCard>
+
+            {/* E. Grafik */}
+            {chartData.length > 0 && (
+              <SectionCard title="Grafik" description="Meal Plan vs Food Record">
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          fontSize: 12,
+                          background: "var(--popover)",
+                          color: "var(--popover-foreground)",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="Meal Plan" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Food Record" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </SectionCard>
+            )}
+
+            {/* F. AI Evaluation */}
+            <SectionCard title="AI Evaluation" description={`Kepatuhan terhadap Meal Plan: ${Math.round(detail.compliance)}%`}>
+              <p className="text-sm leading-relaxed text-foreground">{detail.aiEvaluation}</p>
+            </SectionCard>
+
+            <div className="flex justify-end">
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/meal-plan-history/${historyId}/export-pdf`} target="_blank" rel="noreferrer">
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download PDF
+                </a>
+              </Button>
             </div>
           </div>
         ) : (
