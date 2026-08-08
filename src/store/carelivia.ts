@@ -14,6 +14,7 @@ export type ViewKey =
   | "meal-plan"
   | "meal-plan-history"
   | "exercise"
+  | "bouchard"
   | "food-record"
   | "shopping"
   | "saved-menus"

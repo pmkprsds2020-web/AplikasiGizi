@@ -1162,3 +1162,83 @@ export function useWeeklyCompliance(patientId: string | null) {
     enabled: !!patientId,
   });
 }
+
+// "AI-Powered Hooks" section is also fine since it mixes CRUD + AI)
+// =====================================================================
+
+// ---------------- Bouchard Activity Record (BAR) ----------------
+
+export function useBouchardAssessments(patientId: string | null) {
+  return useQuery({
+    queryKey: ["bouchard", patientId],
+    queryFn: () => jsonFetch<any[]>(`/api/bouchard?patientId=${patientId}`),
+    enabled: !!patientId,
+  });
+}
+
+export function useBouchardAssessment(id: string | null) {
+  return useQuery({
+    queryKey: ["bouchard-detail", id],
+    queryFn: () => jsonFetch<any>(`/api/bouchard?id=${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useSaveBouchardAssessment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      patientId: string;
+      weightKg: number;
+      assessmentDate?: string;
+      day1Date?: string;
+      day1Codes: (number | null)[];
+      day2Date?: string;
+      day2Codes: (number | null)[];
+      day3Date?: string;
+      day3Codes: (number | null)[];
+      notes?: string;
+    }) =>
+      jsonFetch<any>("/api/bouchard", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["bouchard", variables.patientId] });
+    },
+  });
+}
+
+export function useDeleteBouchardAssessment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => jsonFetch<any>(`/api/bouchard?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bouchard"] });
+    },
+  });
+}
+
+export function useAIBouchardInsight() {
+  return useMutation({
+    mutationFn: (input: {
+      assessmentId: string;
+      patientId: string;
+      patientName: string;
+      ageYears?: number;
+      gender?: string;
+      diagnoses?: string[];
+      weightKg: number;
+      avgEnergyExpenditure: number;
+      avgMet: number;
+      avgPal: number;
+      palCategory: string;
+      minutesByBucket: Record<string, number>;
+      whoMinutesPerWeek?: number;
+    }) =>
+      jsonFetch<any>("/api/ai/bouchard-insight", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}

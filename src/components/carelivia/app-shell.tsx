@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Moon, Sun, Menu, X, Stethoscope, HeartPulse, ChefHat, DollarSign, Database, User as UserIcon, LogOut, Settings, History, ChevronsLeft, ChevronsRight, Dna } from "lucide-react";
+import { Moon, Sun, Menu, X, Stethoscope, HeartPulse, ChefHat, DollarSign, Database, User as UserIcon, LogOut, Settings, History, ChevronsLeft, ChevronsRight, Dna, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: "meal-plan-history", label: "Riwayat Meal Plan", short: "Riwayat", icon: History, desc: "Snapshot meal plan tersimpan — lihat/gunakan/hapus", group: "klinis" },
   { key: "saved-menus", label: "Saved Meal Library", short: "Menu Tersimpan", icon: ChefHat, desc: "Template menu & perbandingan", group: "klinis" },
   { key: "exercise", label: "Exercise Plan", short: "Olahraga", icon: Stethoscope, desc: "Rencana latihan terpersonalisasi", group: "klinis" },
+  { key: "bouchard", label: "Bouchard Activity Record", short: "BAR", icon: Activity, desc: "Physical activity log 3 hari — Energy Expenditure, MET & PAL", group: "klinis" },
 
   // Basis Data & Asupan
   { key: "foods", label: "Database Bahan Makanan", short: "Bahan Makanan", icon: Stethoscope, desc: "TKPI/DKBM 73 bahan", group: "data" },

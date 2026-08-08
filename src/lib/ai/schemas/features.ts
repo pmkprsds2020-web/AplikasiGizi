@@ -228,3 +228,19 @@ export const AssessmentSummaryOutputSchema = z.object({
   guideline_references: z.array(z.string()).default([]),
 });
 export type AssessmentSummaryOutput = z.infer<typeof AssessmentSummaryOutputSchema>;
+
+
+// ---------------------------------------------------------------------
+// Bouchard Activity Record — AI Insight
+// ---------------------------------------------------------------------
+export const BouchardInsightOutputSchema = z.object({
+  summary: z.string().min(10),
+  findings: z.array(z.string()).default([]),
+  risk_level: z.enum(["LOW", "MODERATE", "HIGH"]).default("LOW"),
+  who_recommendation: z.string().min(5),
+  acsm_recommendation: z.string().min(5),
+  exercise_prescription: z.array(z.string()).default([]),
+  nutrition_adjustment: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([]),
+});
+export type BouchardInsightOutput = z.infer<typeof BouchardInsightOutputSchema>;

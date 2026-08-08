@@ -13,6 +13,7 @@ import { RecipesView } from "@/components/carelivia/views/recipes-view";
 import { MealPlanView } from "@/components/carelivia/views/meal-plan-view";
 import { MealPlanHistoryView } from "@/components/carelivia/views/history-view";
 import { ExerciseView } from "@/components/carelivia/views/exercise-view";
+import { BouchardView } from "@/components/carelivia/views/bouchard-view";
 import { FoodRecordView } from "@/components/carelivia/views/food-record-view";
 import { ShoppingView } from "@/components/carelivia/views/shopping-view";
 import { SavedMenusView } from "@/components/carelivia/views/saved-menus-view";
@@ -42,6 +43,8 @@ function ViewRouter() {
       return <MealPlanHistoryView />;
     case "exercise":
       return <ExerciseView />;
+    case "bouchard":
+      return <BouchardView />;
     case "food-record":
       return <FoodRecordView />;
     case "shopping":

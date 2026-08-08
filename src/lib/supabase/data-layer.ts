@@ -3197,3 +3197,151 @@ export async function supabaseApplyMealPlanHistory(
   const plan = mealPlanFromSupabase(data?.plan, data?.items ?? []);
   return { data: plan, error: null };
 }
+
+
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// BOUCHARD ACTIVITY RECORD (BAR)
+// ---------------------------------------------------------------------
+
+export function bouchardAssessmentFromSupabase(row: any): any {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    assessmentDate: row.assessment_date,
+    weightKg: Number(row.weight_kg),
+    day1Date: row.day1_date,
+    day1Codes: row.day1_codes || [],
+    day2Date: row.day2_date,
+    day2Codes: row.day2_codes || [],
+    day3Date: row.day3_date,
+    day3Codes: row.day3_codes || [],
+    dayResults: row.day_results || [],
+    avgEnergyExpenditure: Number(row.avg_energy_expenditure ?? 0),
+    avgMet: Number(row.avg_met ?? 0),
+    avgPal: Number(row.avg_pal ?? 0),
+    palCategory: row.pal_category,
+    minutesByBucket: row.minutes_by_bucket || {},
+    whoStatus: row.who_status || {},
+    aiSummary: row.ai_summary,
+    aiFindings: row.ai_findings || [],
+    aiRecommendations: row.ai_recommendations || [],
+    aiRiskLevel: row.ai_risk_level,
+    aiModel: row.ai_model,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function supabaseListBouchardAssessments(patientId?: string): Promise<any[]> {
+  const { client } = await getServerClient();
+  let query = client
+    .from("bouchard_assessments")
+    .select("*")
+    .is("deleted_at", null)
+    .order("assessment_date", { ascending: false })
+    .limit(30);
+
+  if (patientId) query = query.eq("patient_id", patientId);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("[bouchard] list failed:", error.message);
+    return [];
+  }
+  return (data || []).map(bouchardAssessmentFromSupabase);
+}
+
+export async function supabaseGetBouchardAssessment(id: string): Promise<any | null> {
+  const { client } = await getServerClient();
+  const { data, error } = await client
+    .from("bouchard_assessments")
+    .select("*")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error || !data) return null;
+  return bouchardAssessmentFromSupabase(data);
+}
+
+export async function supabaseCreateBouchardAssessment(
+  payload: any,
+): Promise<{ data: any | null; error: string | null }> {
+  const { client, session } = await getServerClient();
+  if (!session) return { data: null, error: "Authentication required." };
+
+  const { data, error } = await client
+    .from("bouchard_assessments")
+    .insert({
+      patient_id: payload.patientId,
+      assessment_date: payload.assessmentDate,
+      weight_kg: payload.weightKg,
+      day1_date: payload.day1Date ?? null,
+      day1_codes: payload.day1Codes ?? [],
+      day2_date: payload.day2Date ?? null,
+      day2_codes: payload.day2Codes ?? [],
+      day3_date: payload.day3Date ?? null,
+      day3_codes: payload.day3Codes ?? [],
+      day_results: payload.dayResults ?? [],
+      avg_energy_expenditure: payload.avgEnergyExpenditure ?? 0,
+      avg_met: payload.avgMet ?? 0,
+      avg_pal: payload.avgPal ?? 0,
+      pal_category: payload.palCategory ?? null,
+      minutes_by_bucket: payload.minutesByBucket ?? {},
+      who_status: payload.whoStatus ?? {},
+      notes: payload.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) return { data: null, error: error.message };
+  return { data: bouchardAssessmentFromSupabase(data), error: null };
+}
+
+export async function supabaseUpdateBouchardAssessmentAI(
+  id: string,
+  ai: {
+    aiSummary?: string;
+    aiFindings?: string[];
+    aiRecommendations?: string[];
+    aiRiskLevel?: string;
+    aiModel?: string;
+  },
+): Promise<{ data: any | null; error: string | null }> {
+  const { client } = await getServerClient();
+  const { data, error } = await client
+    .from("bouchard_assessments")
+    .update({
+      ai_summary: ai.aiSummary,
+      ai_findings: ai.aiFindings ?? [],
+      ai_recommendations: ai.aiRecommendations ?? [],
+      ai_risk_level: ai.aiRiskLevel,
+      ai_model: ai.aiModel,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) return { data: null, error: error.message };
+  return { data: bouchardAssessmentFromSupabase(data), error: null };
+}
+
+export async function supabaseDeleteBouchardAssessment(id: string): Promise<{ error: string | null }> {
+  const { client } = await getServerClient();
+  const { error } = await client
+    .from("bouchard_assessments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  return { error: error?.message ?? null };
+}
+
+/**
+ * Latest BAR result for a patient — used by AI Meal Plan, Exercise Plan,
+ * and AI Clinical Decision Support to read PAL/MET/Energy Expenditure
+ * without duplicating the Bouchard calculation logic.
+ */
+export async function supabaseGetLatestBouchardAssessment(patientId: string): Promise<any | null> {
+  const list = await supabaseListBouchardAssessments(patientId);
+  return list[0] ?? null;
+}
