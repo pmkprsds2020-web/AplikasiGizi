@@ -265,12 +265,29 @@ export function MealPlanView() {
 
   const handlePersist = async () => {
     if (!selectedPatientId) return;
+    // previewData is the exact "Daftar Menu Lengkap" the clinician is
+    // looking at (from Generate / Generate Ulang). We must persist THIS,
+    // not ask the server to generate a new one — the generator is
+    // randomized/rotation-aware, so a second run can pick different
+    // foods even for the same patient, which previously caused "Edit
+    // Meal Plan Terkini (Database)" to show a different menu than what
+    // was just previewed and saved.
+    if (!previewData?.plan) {
+      toast.error("Belum ada Meal Plan untuk disimpan", {
+        description: "Tekan Generate terlebih dahulu.",
+      });
+      return;
+    }
     try {
       await generateMut.mutateAsync({
         patientId: selectedPatientId,
         presetId: activePresetId || undefined,
+        plan: previewData.plan,
+        calorieResult: previewData.calorieResult,
+        aiReasoning: previewData.aiReasoning,
+        preset: previewData.preset,
       });
-      toast.success("Meal plan disimpan ke database");
+      toast.success("Meal plan disimpan ke database dan dijadikan Meal Plan Aktif");
     } catch (e: any) {
       toast.error(e.message || "Gagal menyimpan meal plan");
     }

@@ -52,15 +52,111 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { patientId, presetId } = body as {
+    const { patientId, presetId, plan: previewPlan, calorieResult: previewCalorieResult, aiReasoning: previewReasoning, preset: previewPreset } = body as {
       patientId?: string;
       presetId?: string;
+      // Optional: an already-generated preview from POST /api/meal-plan/isi-piringku
+      // ("Generate" button, in-memory / not yet persisted). When present, this
+      // endpoint persists it VERBATIM instead of running the generator again —
+      // otherwise "Simpan ke Database" would silently save a brand-new random
+      // plan that never matches what the clinician reviewed as "Daftar Menu
+      // Lengkap" on screen (rotation/randomization means every generator run
+      // can pick different foods, even for the same patient/targets).
+      plan?: any;
+      calorieResult?: any;
+      aiReasoning?: string;
+      preset?: any;
     };
     if (!patientId) return err("patientId wajib diisi", 422);
 
     // Resolve Prisma cuid → Supabase UUID if needed
     const resolvedPatientId = await resolvePatientId(patientId);
 
+    // -------------------------------------------------------------------
+    // FAST PATH: persist an already-generated preview verbatim (no
+    // regeneration). This is what "Simpan ke Database" on the AI Meal
+    // Plan page uses after "Generate" has produced a previewData the
+    // user has reviewed.
+    // -------------------------------------------------------------------
+    if (previewPlan && Array.isArray(previewPlan.items) && previewCalorieResult) {
+      let patientForPreview: any = await supabaseGetPatient(resolvedPatientId);
+      if (!patientForPreview) {
+        patientForPreview = await db.patient.findUnique({
+          where: { id: patientId },
+          include: { diagnoses: { where: { active: true } } },
+        });
+      }
+      if (!patientForPreview) return err("Pasien tidak ditemukan", 404);
+
+      const activeDx = (patientForPreview.diagnoses || []).filter((d: any) => d.active);
+
+      const planData = {
+        patientId,
+        presetId: presetId || null,
+        date: new Date().toISOString(),
+        targetCal: previewCalorieResult.targetCalorie,
+        targetProtein: previewCalorieResult.macros.proteinG,
+        targetFat: previewCalorieResult.macros.fatG,
+        targetCarb: previewCalorieResult.macros.carbG,
+        targetFiber: previewCalorieResult.fiberTarget,
+        targetSodium: previewCalorieResult.sodiumMax,
+        totalCal: previewPlan.totals.cal,
+        totalProtein: previewPlan.totals.protein,
+        totalFat: previewPlan.totals.fat,
+        totalCarb: previewPlan.totals.carb,
+        totalFiber: previewPlan.totals.fiber,
+        totalSodium: previewPlan.totals.sodium,
+        compliance: previewPlan.overallCompliance,
+        status: "FINAL",
+        aiModel: previewPreset
+          ? `carelivia-isi-piringku-v2 + z-ai-llm (preset: ${previewPreset.name})`
+          : "carelivia-isi-piringku-v2 + z-ai-llm",
+        aiReasoning: previewReasoning || null,
+      };
+
+      const itemsData = previewPlan.items.map((i: any) => ({
+        slot: i.slot,
+        foodId: i.foodId,
+        amount: i.amount,
+        cal: i.cal,
+        protein: i.protein,
+        fat: i.fat,
+        carb: i.carb,
+        fiber: i.fiber,
+        sodium: i.sodium,
+      }));
+
+      const { data: mealPlan, error: saveError } = await supabaseCreateMealPlan(planData, itemsData);
+      if (saveError || !mealPlan) return err(saveError || "Gagal menyimpan meal plan", 500);
+
+      return ok({
+        plan: previewPlan,
+        mealPlan,
+        calorieResult: previewCalorieResult,
+        preset: previewPreset || null,
+        aiReasoning: previewReasoning || null,
+        compliance: previewPlan.overallCompliance,
+        patient: {
+          id: patientForPreview.id,
+          name: patientForPreview.name,
+          mrn: patientForPreview.mrn,
+          diagnoses: activeDx.map((d: any) => d.type),
+        },
+        targets: {
+          targetCal: previewCalorieResult.targetCalorie,
+          targetProtein: previewCalorieResult.macros.proteinG,
+          targetFat: previewCalorieResult.macros.fatG,
+          targetCarb: previewCalorieResult.macros.carbG,
+          targetFiber: previewCalorieResult.fiberTarget,
+          targetSodium: previewCalorieResult.sodiumMax,
+        },
+        savedTo: "Supabase PostgreSQL",
+      });
+    }
+
+    // -------------------------------------------------------------------
+    // SLOW PATH (no preview supplied): generate AND persist in one call.
+    // -------------------------------------------------------------------
     // Try Supabase first, fall back to Prisma for patient data
     let patient: any = await supabaseGetPatient(resolvedPatientId);
     if (!patient) {

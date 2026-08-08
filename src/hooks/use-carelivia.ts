@@ -300,14 +300,39 @@ export function useActiveMealPlanView(patientId?: string) {
   });
 }
 
-// AI generation — server-side (z-ai-web-dev-sdk)
+// AI generation — server-side (z-ai-web-dev-sdk).
+// When `plan`/`calorieResult` (an already-generated preview from
+// usePreviewIsiPiringku) are passed, the server persists that EXACT
+// preview instead of regenerating — see the "FAST PATH" in
+// /api/meal-plan/route.ts. Without them, it generates AND persists in
+// one call (used by flows that skip the separate preview step).
 export function useGenerateMealPlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ patientId, presetId }: { patientId: string; presetId?: string }) =>
-      jsonFetch<any>("/api/meal-plan", { method: "POST", body: JSON.stringify({ patientId, presetId }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["meal-plans"] });
-      qc.invalidateQueries({ queryKey: ["meal-plan-active-view"] }); },
+    mutationFn: ({
+      patientId,
+      presetId,
+      plan,
+      calorieResult,
+      aiReasoning,
+      preset,
+    }: {
+      patientId: string;
+      presetId?: string;
+      plan?: any;
+      calorieResult?: any;
+      aiReasoning?: string;
+      preset?: any;
+    }) =>
+      jsonFetch<any>("/api/meal-plan", {
+        method: "POST",
+        body: JSON.stringify({ patientId, presetId, plan, calorieResult, aiReasoning, preset }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meal-plans"] });
+      qc.invalidateQueries({ queryKey: ["meal-plan-active-view"] });
+      qc.invalidateQueries({ queryKey: ["meal-plan-history"] });
+    },
   });
 }
 
